@@ -18,14 +18,14 @@ app.get("/", (req, res) => {
   res.json({ message: "Hello, World!" });
 });
 
-export interface RegisterBody {
+export interface AuthBody {
   password: string;
   username: string;
 }
 
 // 2 Step Make api for creating new user (Register and Login)
 app.post("/register", async (req: Request, res: Response) => {
-  const { password, username } = req.body as RegisterBody;
+  const { password, username } = req.body as AuthBody;
 
   try {
     const user = await pool.query("SELECT * FROM users WHERE username = $1", [
@@ -51,6 +51,26 @@ app.post("/register", async (req: Request, res: Response) => {
 });
 
 // Login
+app.post("/login", async (req: Request, res: Response) => {
+  const { password, username } = req.body as AuthBody;
+
+  try {
+    const user = await pool.query("SELECT * FROM users WHERE username = $1", [
+      username,
+    ]);
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const hashedPassword = user.rows[0].password as string;
+
+    if (await bcrypt.compare(password, hashedPassword)) {
+      console.log("Password Correct");
+    }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error(error);
+  }
+});
 
 // 3 Step realize the booking reserve (if user already registered reject)
 
