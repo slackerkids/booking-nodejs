@@ -1,6 +1,6 @@
 // index.ts
-import express from "express";
-import { Request, Response } from "express";
+import bcrypt from "bcrypt";
+import express, { Request, Response } from "express";
 import { Pool } from "pg";
 
 const app = express();
@@ -35,18 +35,19 @@ app.post("/register", async (req: Request, res: Response) => {
     if (user.rows[0]) {
       res.json({ message: "User already exists" });
     } else {
-      // TODO: Hash the password
+      const saltRounds = 10;
+      const salt = await bcrypt.genSalt(saltRounds);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
       await pool.query(
         "INSERT INTO users (username, password) VALUES($1, $2)",
-        [username, password],
+        [username, hashedPassword],
       );
       res.json({ message: "User created succesfully" });
     }
   } catch (error) {
     console.error(error);
   }
-
-  res.sendStatus(200);
 });
 
 // Login
