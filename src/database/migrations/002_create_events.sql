@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS events (
+    event_id SERIAL PRIMARY KEY,
+    name VARCHAR (255) UNIQUE NOT NULL,
+    total_seats INT NOT NULL
+);
