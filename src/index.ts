@@ -9,6 +9,11 @@ export interface authBody {
   username: string;
 }
 
+export interface bookingBody {
+  eventId: number;
+  userId: string;
+}
+
 export interface eventBody {
   eventName: string;
   totalSeats: number;
@@ -17,8 +22,8 @@ export interface eventBody {
 declare module "express-session" {
   export interface SessionData {
     user: {
-      id: number;
       password: string;
+      user_id: number;
       username: string;
     };
   }
@@ -42,10 +47,11 @@ const pool = new Pool({
   connectionString,
 });
 
-app.get("/", (req, res) => {
+app.get("/", (req: Request, res: Response) => {
   res.json({ message: "Hello, World!" });
 });
 
+// Register
 app.post("/register", async (req: Request, res: Response) => {
   const { password, username } = req.body as authBody;
 
@@ -72,6 +78,7 @@ app.post("/register", async (req: Request, res: Response) => {
   }
 });
 
+// Login
 app.post("/login", async (req: Request, res: Response) => {
   const { password, username } = req.body as authBody;
 
@@ -101,6 +108,7 @@ app.post("/login", async (req: Request, res: Response) => {
   }
 });
 
+// Create Events handler
 app.post("/api/events/create", async (req: Request, res: Response) => {
   if (!req.session.user) {
     res.json({ message: "User is not authenticated" });
@@ -109,17 +117,56 @@ app.post("/api/events/create", async (req: Request, res: Response) => {
 
   const { eventName, totalSeats } = req.body as eventBody;
 
-  await pool.query("INSERT INTO events (name, total_seats) VALUES($1, $2)", [
-    eventName,
-    totalSeats,
-  ]);
+  if (!eventName || !totalSeats) {
+    res.json({ message: "Need to provide Event Name and Total Seats" });
+    return;
+  }
 
-  res.json({ message: "Event created successfully" });
+  try {
+    await pool.query("INSERT INTO events (name, total_seats) VALUES($1, $2)", [
+      eventName,
+      totalSeats,
+    ]);
+
+    res.json({ message: "Event created successfully" });
+  } catch (error) {
+    console.error(error);
+    res.json({ message: "Error occured while creating the event" });
+  }
 });
 
-// app.post("/api/bookings/reserve", (req: Request, res: Response) => {
+// Booking Handler
+app.post("/api/bookings/reserve", async (req: Request, res: Response) => {
+  if (!req.session.user) {
+    res.json({ message: "User is not authenticated" });
+    return;
+  }
 
-// });
+  const { eventId } = req.body as bookingBody;
+  const userId = req.session.user.user_id.toString();
+
+  try {
+    const booking = await pool.query(
+      "SELECT * FROM bookings WHERE event_id = $1 AND user_id = $2",
+      [eventId, userId],
+    );
+
+    if (booking.rows[0]) {
+      res.json({ message: "User already booked to event" });
+      return;
+    }
+
+    await pool.query(
+      "INSERT INTO bookings (event_id, user_id) VALUES($1, $2)",
+      [eventId, userId],
+    );
+
+    res.json({ message: "User booked to event" });
+  } catch (error) {
+    console.error(error);
+    res.json(error);
+  }
+});
 
 app.listen(port, () => {
   console.log(`App listening on port ${port}`);
