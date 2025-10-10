@@ -1,10 +1,38 @@
 // index.ts
 import bcrypt from "bcrypt";
 import express, { Request, Response } from "express";
+import session from "express-session";
 import { Pool } from "pg";
+
+export interface authBody {
+  password: string;
+  username: string;
+}
+
+export interface eventBody {
+  eventName: string;
+  totalSeats: number;
+}
+
+declare module "express-session" {
+  export interface SessionData {
+    user: {
+      id: number;
+      password: string;
+      username: string;
+    };
+  }
+}
 
 const app = express();
 app.use(express.json());
+app.use(
+  session({
+    resave: false,
+    saveUninitialized: false,
+    secret: "Hello",
+  }),
+);
 
 const port = process.env.PORT ?? "9001";
 
@@ -18,14 +46,8 @@ app.get("/", (req, res) => {
   res.json({ message: "Hello, World!" });
 });
 
-export interface AuthBody {
-  password: string;
-  username: string;
-}
-
-// 2 Step Make api for creating new user (Register and Login)
 app.post("/register", async (req: Request, res: Response) => {
-  const { password, username } = req.body as AuthBody;
+  const { password, username } = req.body as authBody;
 
   try {
     const user = await pool.query("SELECT * FROM users WHERE username = $1", [
@@ -50,29 +72,50 @@ app.post("/register", async (req: Request, res: Response) => {
   }
 });
 
-// Login
 app.post("/login", async (req: Request, res: Response) => {
-  const { password, username } = req.body as AuthBody;
+  const { password, username } = req.body as authBody;
 
   try {
     const user = await pool.query("SELECT * FROM users WHERE username = $1", [
       username,
     ]);
 
+    if (!user.rows[0]) {
+      res.json({ message: "User not found" });
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const hashedPassword = user.rows[0].password as string;
 
     if (await bcrypt.compare(password, hashedPassword)) {
-      console.log("Password Correct");
+      req.session.regenerate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        req.session.user = user.rows[0];
+        res.json({ message: "User authenticated" });
+      });
+    } else {
+      res.json({ message: "Password is not correct" });
     }
-
-    res.sendStatus(200);
   } catch (error) {
     console.error(error);
   }
 });
 
-// 3 Step realize the booking reserve (if user already registered reject)
+app.post("/api/events/create", async (req: Request, res: Response) => {
+  if (!req.session.user) {
+    res.json({ message: "User is not authenticated" });
+    return;
+  }
+
+  const { eventName, totalSeats } = req.body as eventBody;
+
+  await pool.query("INSERT INTO events (name, total_seats) VALUES($1, $2)", [
+    eventName,
+    totalSeats,
+  ]);
+
+  res.json({ message: "Event created successfully" });
+});
 
 // app.post("/api/bookings/reserve", (req: Request, res: Response) => {
 
